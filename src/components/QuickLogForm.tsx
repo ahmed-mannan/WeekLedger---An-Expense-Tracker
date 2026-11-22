@@ -188,16 +188,16 @@ export function QuickLogForm({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
           {/* Date Picker + Auto-Week Readout */}
-          <div>
+          <div className="min-w-0">
             <label
               htmlFor="entry-date"
               className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5"
             >
               Date
             </label>
-            <div className="relative">
+            <div className="relative min-w-0">
               <Calendar
                 className="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
                 aria-hidden="true"
@@ -207,11 +207,11 @@ export function QuickLogForm({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full min-h-[44px] pl-10 pr-3.5 py-2 text-sm tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-600/15"
+                className="w-full max-w-full min-w-0 box-border min-h-[44px] pl-10 pr-3 py-2 text-sm tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-600/15"
                 required
               />
             </div>
-            <div className="mt-1.5 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
               <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                 Week Num {weekInfo.weekNumber}
               </span>
@@ -221,7 +221,7 @@ export function QuickLogForm({
           </div>
 
           {/* Category / Income Source Dropdown */}
-          <div>
+          <div className="min-w-0">
             <label
               htmlFor="entry-category"
               className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5"

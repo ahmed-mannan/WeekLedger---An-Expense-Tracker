@@ -1,8 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
+  browserLocalPersistence,
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
+  setPersistence,
   signInWithPopup,
   User,
 } from 'firebase/auth';
@@ -16,13 +18,31 @@ export const SCOPES = [
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-const provider = new GoogleAuthProvider();
-for (const scope of SCOPES) {
-  provider.addScope(scope);
-}
-provider.setCustomParameters({
-  prompt: 'select_account',
+// Explicitly persist Firebase user session across browser reloads
+void setPersistence(auth, browserLocalPersistence).catch(() => {
+  // Ignore if running in restricted storage mode
 });
+
+function buildProvider(options?: {
+  loginHint?: string | null;
+  forceAccountSelect?: boolean;
+}) {
+  const provider = new GoogleAuthProvider();
+  for (const scope of SCOPES) {
+    provider.addScope(scope);
+  }
+  const params: Record<string, string> = {};
+  if (options?.forceAccountSelect) {
+    params.prompt = 'select_account';
+  }
+  if (options?.loginHint) {
+    params.login_hint = options.loginHint;
+  }
+  if (Object.keys(params).length > 0) {
+    provider.setCustomParameters(params);
+  }
+  return provider;
+}
 
 let isSigningIn = false;
 // In-memory only: never persist OAuth access tokens to localStorage or sessionStorage.
@@ -47,12 +67,16 @@ export const initAuth = (
   });
 };
 
-export const googleSignIn = async (): Promise<{
+export const googleSignIn = async (options?: {
+  loginHint?: string | null;
+  forceAccountSelect?: boolean;
+}): Promise<{
   user: User;
   accessToken: string;
 } | null> => {
   try {
     isSigningIn = true;
+    const provider = buildProvider(options);
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {

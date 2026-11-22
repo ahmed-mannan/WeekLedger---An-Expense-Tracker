@@ -116,12 +116,12 @@ export function MonthlySummarySection({
       </div>
 
       {/* Weekly Breakdown + Category Totals */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-        <div className="lg:col-span-7">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2 min-w-0">
+        <div className="lg:col-span-7 min-w-0">
           <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-2.5">
             Week-by-Week ({monthLabel})
           </h3>
-          <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-xl">
+          <div className="w-full min-w-0 overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-xl">
             <table className="w-full text-left border-collapse text-xs sm:text-sm">
               <thead>
                 <tr className="bg-zinc-50 dark:bg-zinc-900/80 text-zinc-600 dark:text-zinc-400 text-xs border-b border-zinc-200 dark:border-zinc-800">

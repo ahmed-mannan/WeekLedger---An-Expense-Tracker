@@ -141,11 +141,11 @@ export function BudgetRuleSection({
   return (
     <section
       aria-labelledby="budget-rule-heading"
-      className="bg-white dark:bg-[#111113] border border-zinc-200/90 dark:border-zinc-800 rounded-2xl p-5 sm:p-6 space-y-6"
+      className="min-w-0 bg-white dark:bg-[#111113] border border-zinc-200/90 dark:border-zinc-800 rounded-2xl p-4 sm:p-6 space-y-6"
     >
       {/* Header + Editable Ratio Inputs */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 min-w-0">
+        <div className="min-w-0">
           <h2
             id="budget-rule-heading"
             className="text-base sm:text-lg font-semibold text-zinc-900 dark:text-zinc-50"
@@ -159,53 +159,65 @@ export function BudgetRuleSection({
         </div>
 
         {/* Editable Ratio Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5">
-            <label className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 w-full lg:w-auto min-w-0">
+          <div className="grid grid-cols-3 sm:inline-flex items-center gap-1 sm:gap-1.5 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 w-full sm:w-auto">
+            <label className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-medium text-zinc-600 dark:text-zinc-300 min-w-0">
               <span>Needs</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                aria-label="Needs target percentage"
-                value={ratio.needs}
-                onChange={(e) => handleFieldChange('needs', e.target.value)}
-                className="w-10 h-7 text-center font-semibold tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500"
-              />
-              <span>%</span>
+              <span className="inline-flex items-center gap-0.5">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="Needs target percentage"
+                  value={ratio.needs}
+                  onChange={(e) => handleFieldChange('needs', e.target.value)}
+                  className="w-10 h-7 text-center font-semibold tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500"
+                />
+                <span>%</span>
+              </span>
             </label>
 
-            <span className="text-zinc-300 dark:text-zinc-700" aria-hidden="true">
+            <span
+              className="hidden sm:inline text-zinc-300 dark:text-zinc-700"
+              aria-hidden="true"
+            >
               /
             </span>
 
-            <label className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            <label className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-medium text-zinc-600 dark:text-zinc-300 min-w-0">
               <span>Wants</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                aria-label="Wants target percentage"
-                value={ratio.wants}
-                onChange={(e) => handleFieldChange('wants', e.target.value)}
-                className="w-10 h-7 text-center font-semibold tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500"
-              />
-              <span>%</span>
+              <span className="inline-flex items-center gap-0.5">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="Wants target percentage"
+                  value={ratio.wants}
+                  onChange={(e) => handleFieldChange('wants', e.target.value)}
+                  className="w-10 h-7 text-center font-semibold tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500"
+                />
+                <span>%</span>
+              </span>
             </label>
 
-            <span className="text-zinc-300 dark:text-zinc-700" aria-hidden="true">
+            <span
+              className="hidden sm:inline text-zinc-300 dark:text-zinc-700"
+              aria-hidden="true"
+            >
               /
             </span>
 
-            <label className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            <label className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-medium text-zinc-600 dark:text-zinc-300 min-w-0">
               <span>Savings</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                aria-label="Savings target percentage"
-                value={ratio.savings}
-                onChange={(e) => handleFieldChange('savings', e.target.value)}
-                className="w-10 h-7 text-center font-semibold tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500"
-              />
-              <span>%</span>
+              <span className="inline-flex items-center gap-0.5">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="Savings target percentage"
+                  value={ratio.savings}
+                  onChange={(e) => handleFieldChange('savings', e.target.value)}
+                  className="w-10 h-7 text-center font-semibold tabular-nums text-zinc-900 dark:text-zinc-50 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500"
+                />
+                <span>%</span>
+              </span>
             </label>
           </div>
 
@@ -214,7 +226,7 @@ export function BudgetRuleSection({
               type="button"
               onClick={() => onChangeRatio(DEFAULT_BUDGET_RATIO)}
               title="Reset to 50 / 30 / 20"
-              className="min-h-[40px] px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-50 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="min-h-[40px] px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-50 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap self-start sm:self-auto"
             >
               <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Reset 50/30/20</span>
@@ -340,27 +352,27 @@ export function BudgetRuleSection({
       </div>
 
       {/* Budget Allocation & Actuals Table */}
-      <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-xl">
-        <div className="bg-zinc-900 dark:bg-zinc-950 text-zinc-50 text-xs font-semibold tracking-wide px-4 py-2.5 flex items-center justify-between border-b border-zinc-800">
-          <span>
+      <div className="w-full min-w-0 overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-xl">
+        <div className="bg-zinc-900 dark:bg-zinc-950 text-zinc-50 text-xs font-semibold tracking-wide px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 border-b border-zinc-800">
+          <span className="truncate">
             {ratio.needs} / {ratio.wants} / {ratio.savings} Budget Allocation &amp; Actuals
           </span>
-          <span className="text-zinc-400 font-normal">In-App Calculation</span>
+          <span className="text-zinc-400 font-normal shrink-0">In-App</span>
         </div>
-        <table className="w-full text-left border-collapse text-xs sm:text-sm">
+        <table className="w-full text-left border-collapse text-[11px] sm:text-sm">
           <thead>
-            <tr className="bg-zinc-50 dark:bg-zinc-900/80 text-zinc-600 dark:text-zinc-400 text-xs border-b border-zinc-200 dark:border-zinc-800">
-              <th className="py-2.5 px-3.5 font-medium">Category</th>
-              <th className="py-2.5 px-3.5 font-medium text-right">Target %</th>
-              <th className="py-2.5 px-3.5 font-medium text-right">
-                Target Budget
+            <tr className="bg-zinc-50 dark:bg-zinc-900/80 text-zinc-600 dark:text-zinc-400 text-[11px] sm:text-xs border-b border-zinc-200 dark:border-zinc-800">
+              <th className="py-2.5 px-2.5 sm:px-3.5 font-medium">Category</th>
+              <th className="py-2.5 px-2 sm:px-3.5 font-medium text-right">Target %</th>
+              <th className="py-2.5 px-2 sm:px-3.5 font-medium text-right">
+                Target
               </th>
-              <th className="py-2.5 px-3.5 font-medium text-right">
-                Actual Spend
+              <th className="py-2.5 px-2 sm:px-3.5 font-medium text-right">
+                Actual
               </th>
-              <th className="py-2.5 px-3.5 font-medium text-right">Actual %</th>
-              <th className="py-2.5 px-3.5 font-medium text-right">
-                Difference
+              <th className="py-2.5 px-2 sm:px-3.5 font-medium text-right">Actual %</th>
+              <th className="py-2.5 px-2.5 sm:px-3.5 font-medium text-right">
+                Diff
               </th>
             </tr>
           </thead>

@@ -81,20 +81,20 @@ export function SettingsView({
         </p>
 
         {sheetMeta && (
-          <dl className="mt-4 bg-zinc-50 dark:bg-zinc-900/70 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-2.5 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <dl className="mt-4 bg-zinc-50 dark:bg-zinc-900/70 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-2.5 text-sm min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
               <dt className="text-zinc-500 dark:text-zinc-400">
                 Spreadsheet Name
               </dt>
-              <dd className="font-medium text-zinc-900 dark:text-zinc-100">
+              <dd className="font-medium text-zinc-900 dark:text-zinc-100 break-words min-w-0">
                 {sheetMeta.title}
               </dd>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
               <dt className="text-zinc-500 dark:text-zinc-400">
                 Connected Account
               </dt>
-              <dd className="font-medium text-zinc-900 dark:text-zinc-100">
+              <dd className="font-medium text-zinc-900 dark:text-zinc-100 break-all min-w-0">
                 {userName ? `${userName} (${userEmail})` : userEmail}
               </dd>
             </div>

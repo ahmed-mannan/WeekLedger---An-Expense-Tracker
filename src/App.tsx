@@ -7,6 +7,7 @@ import {
   List,
   Menu,
   Moon,
+  RefreshCw,
   Settings as SettingsIcon,
   Sun,
   X,
@@ -62,6 +63,13 @@ type PendingConfirm =
 
 const THEME_STORAGE_KEY = 'weekledger-theme';
 const RATIO_STORAGE_KEY = 'weekledger-budget-ratio';
+const DATA_CACHE_PREFIX = 'weekledger-data-cache-';
+
+interface CachedSheetSnapshot {
+  sheetMeta: SheetMetadata | null;
+  transactions: Transaction[];
+  settings: AppSettings;
+}
 
 function loadInitialRatio(): BudgetRatio {
   try {
@@ -82,6 +90,32 @@ function loadInitialRatio(): BudgetRatio {
   return DEFAULT_BUDGET_RATIO;
 }
 
+function readLocalSnapshot(uid: string): CachedSheetSnapshot | null {
+  try {
+    const raw = localStorage.getItem(`${DATA_CACHE_PREFIX}${uid}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as CachedSheetSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalSnapshot(uid: string, snapshot: CachedSheetSnapshot) {
+  try {
+    localStorage.setItem(`${DATA_CACHE_PREFIX}${uid}`, JSON.stringify(snapshot));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function clearLocalSnapshot(uid: string) {
+  try {
+    localStorage.removeItem(`${DATA_CACHE_PREFIX}${uid}`);
+  } catch {
+    // ignore
+  }
+}
+
 export default function App() {
   const [isDark, setIsDark] = useState<boolean>(() =>
     document.documentElement.classList.contains('dark')
@@ -89,7 +123,7 @@ export default function App() {
   const [budgetRatio, setBudgetRatio] = useState<BudgetRatio>(loadInitialRatio);
 
   const [user, setUser] = useState<User | null>(null);
-  const [needsAuth, setNeedsAuth] = useState<boolean>(true);
+  const [needsSheetSyncAuth, setNeedsSheetSyncAuth] = useState<boolean>(false);
   const [authInitialized, setAuthInitialized] = useState<boolean>(false);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -139,48 +173,67 @@ export default function App() {
     }
   };
 
-  const bootstrapAndLoadSheet = useCallback(async (token: string) => {
-    setIsLoadingSheet(true);
-    setSyncError(null);
-    try {
-      const meta = await findOrCreateTrackerSpreadsheet(token);
-      setSheetMeta(meta);
-      const data = await loadSheetData(
-        token,
-        meta.spreadsheetId,
-        meta.schemaVersion
-      );
-      setTransactions(data.transactions);
-      setSettings(data.settings);
-    } catch (err) {
-      if (err instanceof AuthExpiredError) {
-        clearAccessToken();
-        setNeedsAuth(true);
-        setSyncError(err.message);
-      } else {
-        setSyncError(
-          err instanceof Error
-            ? err.message
-            : 'Unable to load your Google Sheet right now.'
+  const bootstrapAndLoadSheet = useCallback(
+    async (token: string, uid: string) => {
+      setIsLoadingSheet(true);
+      setSyncError(null);
+      try {
+        const meta = await findOrCreateTrackerSpreadsheet(token);
+        const data = await loadSheetData(
+          token,
+          meta.spreadsheetId,
+          meta.schemaVersion
         );
+        setSheetMeta(meta);
+        setTransactions(data.transactions);
+        setSettings(data.settings);
+        setNeedsSheetSyncAuth(false);
+        writeLocalSnapshot(uid, {
+          sheetMeta: meta,
+          transactions: data.transactions,
+          settings: data.settings,
+        });
+      } catch (err) {
+        if (err instanceof AuthExpiredError) {
+          clearAccessToken();
+          setNeedsSheetSyncAuth(true);
+        } else {
+          setSyncError(
+            err instanceof Error
+              ? err.message
+              : 'Unable to load your Google Sheet right now.'
+          );
+        }
+      } finally {
+        setIsLoadingSheet(false);
       }
-    } finally {
-      setIsLoadingSheet(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     const unsubscribe = initAuth(
       (authedUser, token) => {
         setUser(authedUser);
-        setNeedsAuth(false);
+        setNeedsSheetSyncAuth(false);
         setAuthInitialized(true);
-        void bootstrapAndLoadSheet(token);
+        void bootstrapAndLoadSheet(token, authedUser.uid);
       },
       (maybeUser) => {
         setUser(maybeUser);
-        setNeedsAuth(true);
         setAuthInitialized(true);
+        if (maybeUser) {
+          // User login is saved via Firebase persistence! Restore non-token local snapshot immediately.
+          const cached = readLocalSnapshot(maybeUser.uid);
+          if (cached) {
+            setSheetMeta(cached.sheetMeta);
+            setTransactions(cached.transactions);
+            setSettings(cached.settings);
+          }
+          setNeedsSheetSyncAuth(true);
+        } else {
+          setNeedsSheetSyncAuth(false);
+        }
       }
     );
     return () => unsubscribe();
@@ -195,16 +248,65 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [menuOpen]);
 
-  const handleLogin = async () => {
+  /**
+   * Ensures we have a live in-memory Google Workspace access token.
+   * If the user is already signed in (persisted across reload), seamlessly refreshes
+   * with login_hint so they don't hit a full login wall.
+   */
+  const ensureLiveToken = async (): Promise<{
+    token: string;
+    uid: string;
+    meta: SheetMetadata;
+  } | null> => {
+    const existingToken = getAccessToken();
+    if (existingToken && user && sheetMeta) {
+      return { token: existingToken, uid: user.uid, meta: sheetMeta };
+    }
+
     setIsLoggingIn(true);
     setAuthError(null);
     setSyncError(null);
     try {
-      const result = await googleSignIn();
+      const result = await googleSignIn({
+        loginHint: user?.email ?? null,
+        forceAccountSelect: !user,
+      });
+      if (!result) return null;
+
+      setUser(result.user);
+      setNeedsSheetSyncAuth(false);
+
+      let activeMeta = sheetMeta;
+      if (!activeMeta) {
+        activeMeta = await findOrCreateTrackerSpreadsheet(result.accessToken);
+        setSheetMeta(activeMeta);
+      }
+
+      return {
+        token: result.accessToken,
+        uid: result.user.uid,
+        meta: activeMeta,
+      };
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Google Sign-In was cancelled.';
+      setSyncError(message);
+      return null;
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleInitialLogin = async () => {
+    setIsLoggingIn(true);
+    setAuthError(null);
+    setSyncError(null);
+    try {
+      const result = await googleSignIn({ forceAccountSelect: true });
       if (result) {
         setUser(result.user);
-        setNeedsAuth(false);
-        await bootstrapAndLoadSheet(result.accessToken);
+        setNeedsSheetSyncAuth(false);
+        await bootstrapAndLoadSheet(result.accessToken, result.user.uid);
       }
     } catch (err) {
       const message =
@@ -216,9 +318,12 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
+    if (user) {
+      clearLocalSnapshot(user.uid);
+    }
     await logout();
     setUser(null);
-    setNeedsAuth(true);
+    setNeedsSheetSyncAuth(false);
     setSheetMeta(null);
     setTransactions([]);
     setEditingTx(null);
@@ -227,61 +332,38 @@ export default function App() {
   };
 
   const refreshFromSheet = async () => {
-    const token = getAccessToken();
-    if (!token) {
-      setNeedsAuth(true);
-      return;
-    }
-    if (!sheetMeta) {
-      await bootstrapAndLoadSheet(token);
-      return;
-    }
-    setIsLoadingSheet(true);
-    setSyncError(null);
-    try {
-      const data = await loadSheetData(
-        token,
-        sheetMeta.spreadsheetId,
-        sheetMeta.schemaVersion
-      );
-      setTransactions(data.transactions);
-      setSettings(data.settings);
-    } catch (err) {
-      if (err instanceof AuthExpiredError) {
-        clearAccessToken();
-        setNeedsAuth(true);
-      }
-      setSyncError(
-        err instanceof Error ? err.message : 'Failed to refresh sheet data.'
-      );
-    } finally {
-      setIsLoadingSheet(false);
-    }
+    const session = await ensureLiveToken();
+    if (!session) return;
+    await bootstrapAndLoadSheet(session.token, session.uid);
   };
 
   const handleCreateTransaction = async (
     input: NewTransactionInput
   ): Promise<boolean> => {
-    const token = getAccessToken();
-    if (!token || !sheetMeta) {
-      setNeedsAuth(true);
-      return false;
-    }
+    const session = await ensureLiveToken();
+    if (!session) return false;
+
     setIsSubmitting(true);
     setSyncError(null);
     try {
       await appendTransaction(
-        token,
-        sheetMeta.spreadsheetId,
-        sheetMeta.schemaVersion,
+        session.token,
+        session.meta.spreadsheetId,
+        session.meta.schemaVersion,
         input
       );
       const data = await loadSheetData(
-        token,
-        sheetMeta.spreadsheetId,
-        sheetMeta.schemaVersion
+        session.token,
+        session.meta.spreadsheetId,
+        session.meta.schemaVersion
       );
       setTransactions(data.transactions);
+      setSettings(data.settings);
+      writeLocalSnapshot(session.uid, {
+        sheetMeta: session.meta,
+        transactions: data.transactions,
+        settings: data.settings,
+      });
 
       const weekInfo = getWeekInfoForDate(input.date);
       if (weekInfo.yearMonth !== summaryMonth) {
@@ -291,7 +373,7 @@ export default function App() {
     } catch (err) {
       if (err instanceof AuthExpiredError) {
         clearAccessToken();
-        setNeedsAuth(true);
+        setNeedsSheetSyncAuth(true);
       }
       setSyncError(
         err instanceof Error
@@ -306,10 +388,9 @@ export default function App() {
 
   const handleExecutePendingConfirm = async () => {
     if (!pendingConfirm) return;
-    const token = getAccessToken();
-    if (!token || !sheetMeta) {
+    const session = await ensureLiveToken();
+    if (!session) {
       setPendingConfirm(null);
-      setNeedsAuth(true);
       return;
     }
 
@@ -318,18 +399,18 @@ export default function App() {
     try {
       if (pendingConfirm.kind === 'edit') {
         await updateTransactionRow(
-          token,
-          sheetMeta.spreadsheetId,
-          sheetMeta.schemaVersion,
+          session.token,
+          session.meta.spreadsheetId,
+          session.meta.schemaVersion,
           pendingConfirm.existing,
           pendingConfirm.updated
         );
         setEditingTx(null);
       } else if (pendingConfirm.kind === 'delete') {
         await deleteTransactionRow(
-          token,
-          sheetMeta.spreadsheetId,
-          sheetMeta.transactionsSheetId,
+          session.token,
+          session.meta.spreadsheetId,
+          session.meta.transactionsSheetId,
           pendingConfirm.transaction.rowNumber
         );
         if (editingTx?.id === pendingConfirm.transaction.id) {
@@ -337,28 +418,38 @@ export default function App() {
         }
       } else if (pendingConfirm.kind === 'settings') {
         await saveSettingsToSheet(
-          token,
-          sheetMeta.spreadsheetId,
+          session.token,
+          session.meta.spreadsheetId,
           pendingConfirm.nextSettings
         );
         setSettings(pendingConfirm.nextSettings);
+        writeLocalSnapshot(session.uid, {
+          sheetMeta: session.meta,
+          transactions,
+          settings: pendingConfirm.nextSettings,
+        });
       } else if (pendingConfirm.kind === 'migrate') {
         await migrateLegacySheetTo8Columns(
-          token,
-          sheetMeta.spreadsheetId,
+          session.token,
+          session.meta.spreadsheetId,
           transactions
         );
         const updatedMeta: SheetMetadata = {
-          ...sheetMeta,
+          ...session.meta,
           schemaVersion: 'v2-8col',
         };
         setSheetMeta(updatedMeta);
         const data = await loadSheetData(
-          token,
+          session.token,
           updatedMeta.spreadsheetId,
           'v2-8col'
         );
         setTransactions(data.transactions);
+        writeLocalSnapshot(session.uid, {
+          sheetMeta: updatedMeta,
+          transactions: data.transactions,
+          settings: data.settings,
+        });
       }
 
       if (
@@ -366,17 +457,22 @@ export default function App() {
         pendingConfirm.kind !== 'migrate'
       ) {
         const data = await loadSheetData(
-          token,
-          sheetMeta.spreadsheetId,
-          sheetMeta.schemaVersion
+          session.token,
+          session.meta.spreadsheetId,
+          session.meta.schemaVersion
         );
         setTransactions(data.transactions);
+        writeLocalSnapshot(session.uid, {
+          sheetMeta: session.meta,
+          transactions: data.transactions,
+          settings: data.settings,
+        });
       }
       setPendingConfirm(null);
     } catch (err) {
       if (err instanceof AuthExpiredError) {
         clearAccessToken();
-        setNeedsAuth(true);
+        setNeedsSheetSyncAuth(true);
       }
       setSyncError(
         err instanceof Error ? err.message : 'Failed to update Google Sheets.'
@@ -422,15 +518,15 @@ export default function App() {
     );
   }
 
-  // Signed-out / Reconnect Landing
-  if (needsAuth) {
+  // Only show Sign-In screen when user is truly signed out (user === null)
+  if (!user) {
     return (
       <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#09090B] flex flex-col">
-        <header className="w-full bg-white dark:bg-[#111113] border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-8 h-14 flex items-center justify-between gap-4">
+        <header className="w-full bg-white dark:bg-[#111113] border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-8 h-14 flex items-center justify-between gap-3">
           <span className="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-50 whitespace-nowrap">
             WeekLedger
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={toggleTheme}
@@ -439,11 +535,13 @@ export default function App() {
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <GoogleSignInButton
-              onClick={handleLogin}
-              disabled={isLoggingIn}
-              label={isLoggingIn ? 'Connecting...' : 'Sign in with Google'}
-            />
+            <div className="hidden sm:block">
+              <GoogleSignInButton
+                onClick={handleInitialLogin}
+                disabled={isLoggingIn}
+                label={isLoggingIn ? 'Connecting...' : 'Sign in with Google'}
+              />
+            </div>
           </div>
         </header>
 
@@ -453,37 +551,20 @@ export default function App() {
               Google Sheets Student Expense Tracker
             </p>
             <h1 className="mt-2 text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 text-balance">
-              {user
-                ? 'Reconnect your Google Sheet to continue'
-                : 'Simple expense logging, stored cleanly in Google Sheets.'}
+              Simple expense logging, stored cleanly in Google Sheets.
             </h1>
             <p className="mt-3 text-sm sm:text-base text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              {user
-                ? `Signed in as ${user.email}. Continue with Google to reconnect your session and log entries to your spreadsheet.`
-                : 'Log your weekly home allowance, bank salary, and daily expenses in seconds. Every row is written cleanly to your Google Sheet with automatic Sunday-start week numbers.'}
+              Log your weekly home allowance, bank salary, and daily expenses in
+              seconds. Every row is written cleanly to your Google Sheet with
+              automatic Sunday-start week numbers.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <GoogleSignInButton
-                onClick={handleLogin}
+                onClick={handleInitialLogin}
                 disabled={isLoggingIn}
-                label={
-                  isLoggingIn
-                    ? 'Connecting...'
-                    : user
-                      ? 'Continue with Google'
-                      : 'Sign in with Google'
-                }
+                label={isLoggingIn ? 'Connecting...' : 'Sign in with Google'}
               />
-              {user && (
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="min-h-[44px] px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-50 border border-zinc-300 dark:border-zinc-700 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  Use Different Account
-                </button>
-              )}
             </div>
 
             {authError && (
@@ -501,10 +582,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#09090B] pb-12">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#FAFAFA] dark:bg-[#09090B] pb-12">
       {/* Minimal Top Bar: App Name on left + Theme toggle & 3-line Menu Button on right */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#111113]/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => {
@@ -516,7 +597,7 @@ export default function App() {
             WeekLedger
           </button>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={toggleTheme}
@@ -616,18 +697,46 @@ export default function App() {
         )}
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+      <main className="max-w-5xl mx-auto px-3.5 sm:px-6 pt-5 sm:pt-6 space-y-5 sm:space-y-6 min-w-0">
+        {/* Non-blocking Sheet Sync Prompt after page reload (login itself stays saved!) */}
+        {needsSheetSyncAuth && (
+          <div className="bg-white dark:bg-[#111113] border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 min-w-0">
+              <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+                Signed in as {user.email}.
+              </span>{' '}
+              Tap Sync Sheet to fetch latest Google Sheets updates (or log a new
+              entry directly to reconnect automatically).
+            </div>
+            <button
+              type="button"
+              onClick={refreshFromSheet}
+              disabled={isLoggingIn || isLoadingSheet}
+              className="min-h-[40px] px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-zinc-950 rounded-xl inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 self-start sm:self-auto disabled:opacity-60"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${
+                  isLoggingIn || isLoadingSheet ? 'animate-spin' : ''
+                }`}
+              />
+              <span>
+                {isLoggingIn || isLoadingSheet ? 'Syncing...' : 'Sync Sheet'}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Global Sync Error Banner */}
         {syncError && (
           <div
             role="alert"
             className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-sm text-rose-700 dark:text-rose-300"
           >
-            <span>{syncError}</span>
+            <span className="min-w-0 break-words">{syncError}</span>
             <button
               type="button"
               onClick={refreshFromSheet}
-              className="min-h-[36px] px-3 py-1 text-xs font-medium bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-800 rounded-lg hover:bg-rose-100/50 dark:hover:bg-rose-900/40 transition-colors"
+              className="min-h-[36px] px-3 py-1 text-xs font-medium bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-800 rounded-lg hover:bg-rose-100/50 dark:hover:bg-rose-900/40 transition-colors shrink-0"
             >
               Retry Sync
             </button>
@@ -638,7 +747,7 @@ export default function App() {
         {sheetMeta?.schemaVersion === 'v1-10col' &&
           transactions.length > 0 && (
             <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-2xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-amber-950 dark:text-amber-200">
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">
                   Update spreadsheet columns to the new 8-column format?
                 </p>
@@ -662,16 +771,16 @@ export default function App() {
         {activePage === 'dashboard' && (
           <>
             {/* Welcome + Quick Current Month Summary */}
-            <section className="bg-white dark:bg-[#111113] border border-zinc-200/90 dark:border-zinc-800 rounded-2xl p-5 sm:p-6">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <section className="min-w-0 bg-white dark:bg-[#111113] border border-zinc-200/90 dark:border-zinc-800 rounded-2xl p-4 sm:p-6">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 break-words">
                 Welcome, {displayName}
               </h1>
               <p className="mt-1 text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
                 Quick summary for {currentMonthSummary.monthLabel}
               </p>
 
-              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
+              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0">
+                <div className="min-w-0">
                   <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                     Total Income
                   </span>
@@ -695,7 +804,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                     Total Spend
                   </span>
@@ -719,7 +828,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                     Balance Left
                   </span>
@@ -745,7 +854,7 @@ export default function App() {
             </section>
 
             {/* Simple Logging Options */}
-            <div ref={logFormRef}>
+            <div ref={logFormRef} className="min-w-0">
               <QuickLogForm
                 currencySymbol={settings.currencySymbol}
                 editingTransaction={editingTx}
@@ -779,7 +888,7 @@ export default function App() {
 
         {/* PAGE 2: TRANSACTIONS (Clean History Only) */}
         {activePage === 'transactions' && (
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             <button
               type="button"
               onClick={() => setActivePage('dashboard')}
@@ -804,7 +913,7 @@ export default function App() {
 
         {/* PAGE 3: SETTINGS */}
         {activePage === 'settings' && (
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             <button
               type="button"
               onClick={() => setActivePage('dashboard')}
