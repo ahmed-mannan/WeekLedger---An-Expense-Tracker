@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WeekLedger — Student Expense &amp; Budget Tracker</title>
+    <meta
+      name="description"
+      content="A clean weekly and monthly student expense tracker synced directly to Google Sheets with automatic Sunday-start week detection and custom budget ratio tracking."
+    />
+    <meta property="og:title" content="WeekLedger — Student Expense &amp; Budget Tracker" />
+    <meta
+      property="og:description"
+      content="Track weekly home allowances, digital banking salary, and everyday spending directly in your own Google Sheet."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      try {
+        var savedTheme = localStorage.getItem('weekledger-theme');
+        if (
+          savedTheme === 'dark' ||
+          (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="bg-[#FAFAFA] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-50 antialiased selection:bg-emerald-600/15 selection:text-emerald-700 dark:selection:bg-emerald-400/20 dark:selection:text-emerald-300">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

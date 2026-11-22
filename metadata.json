@@ -1,0 +1,8 @@
+{
+  "name": "WeekLedger",
+  "description": "A clean weekly and monthly student expense tracker synced directly to Google Sheets with automatic Sunday-start week detection and 50/30/20 budget tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
